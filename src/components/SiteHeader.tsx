@@ -1,5 +1,6 @@
 import { Link } from "@tanstack/react-router";
-import { BookOpenText } from "lucide-react";
+import { BookOpenText, ShieldCheck } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
 
 const NAV = [
   { label: "Правила", to: "/article/$slug", params: { slug: "pravila" } },
@@ -8,6 +9,7 @@ const NAV = [
 ] as const;
 
 export function SiteHeader() {
+  const { user, username, isAdmin, loading } = useAuth();
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-background/80 backdrop-blur-xl">
       <div className="mx-auto grid max-w-7xl grid-cols-[minmax(0,1fr)_auto] items-center gap-4 px-4 py-3 sm:flex sm:justify-between sm:px-6">
@@ -32,9 +34,20 @@ export function SiteHeader() {
               </Link>
             ))}
           </div>
-          <button className="shrink-0 rounded-md border border-border bg-secondary px-4 py-2 text-sm font-medium text-foreground transition-shadow hover:glow-cyan">
-            Кабинет
-          </button>
+          {isAdmin ? (
+            <Link
+              to="/admin"
+              className="hidden shrink-0 items-center gap-1.5 rounded-md border border-magenta/60 px-3 py-2 text-sm text-magenta transition-shadow hover:glow-magenta sm:flex"
+            >
+              <ShieldCheck className="size-4 shrink-0" /> Админка
+            </Link>
+          ) : null}
+          <Link
+            to={user ? "/cabinet" : "/auth"}
+            className="shrink-0 rounded-md border border-border bg-secondary px-4 py-2 text-sm font-medium text-foreground transition-shadow hover:glow-cyan"
+          >
+            {loading ? "…" : user ? (username ?? "Кабинет") : "Войти"}
+          </Link>
         </nav>
       </div>
     </header>
