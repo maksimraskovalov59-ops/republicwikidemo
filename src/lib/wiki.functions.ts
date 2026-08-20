@@ -66,3 +66,39 @@ export const claimAdmin = createServerFn({ method: "POST" })
     if (error) return { ok: false as const, error: "Не удалось выдать права" };
     return { ok: true as const };
   });
+
+export const getComments = createServerFn({ method: "GET" })
+  .inputValidator((data: { articleId: string }) => data)
+  .handler(async ({ data }) => {
+    const sb = createPublicClient();
+    const { data: rows } = await sb
+      .from("comments")
+      .select("id,author_name,body,created_at")
+      .eq("article_id", data.articleId)
+      .order("created_at", { ascending: false })
+      .limit(100);
+    return rows ?? [];
+  });
+
+export const addComment = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data: { articleId: string; body: string }) => data)
+  .handler(async ({ data, context }) => {
+    const body = data.body.trim();
+    if (body.length < 1 || body.length > 2000) {
+      return { ok: false as const, error: "Комментарий должен быть от 1 до 2000 символов" };
+    }
+    const { data: profile } = await context.supabase
+      .from("profiles")
+      .select("username")
+      .eq("id", context.userId)
+      .maybeSingle();
+    const { error } = await context.supabase.from("comments").insert({
+      article_id: data.articleId,
+      author_id: context.userId,
+      author_name: profile?.username ?? "Игрок",
+      body,
+    });
+    if (error) return { ok: false as const, error: "Не удалось отправить комментарий" };
+    return { ok: true as const };
+  });

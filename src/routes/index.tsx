@@ -1,9 +1,20 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { queryOptions, useSuspenseQuery } from "@tanstack/react-query";
+import { useMemo, useState } from "react";
 import { Eye, Newspaper, Search, Sparkles, Star } from "lucide-react";
 import { SiteHeader } from "@/components/SiteHeader";
 import { PixelField } from "@/components/PixelField";
+import { getHomeData } from "@/lib/wiki.functions";
+
+const homeQuery = queryOptions({
+  queryKey: ["home"],
+  queryFn: () => getHomeData(),
+});
 
 export const Route = createFileRoute("/")({
+  loader: async ({ context }) => {
+    await context.queryClient.ensureQueryData(homeQuery);
+  },
   head: () => ({
     meta: [
       { title: "RepublicMC WIKI — энциклопедия сервера" },
@@ -22,47 +33,14 @@ export const Route = createFileRoute("/")({
   component: Index,
 });
 
-const NEWS = [
-  {
-    tag: "Выборы",
-    date: "Сегодня, 18:20",
-    title: "Итоги выборов в Парламент",
-    text: "Завершился третий тур голосования. Демократическая коалиция забирает большинство.",
-    slug: "vybory-parlament",
-  },
-  {
-    tag: "Конституция",
-    date: "Вчера, 14:00",
-    title: "Поправки к земельному налогу",
-    text: "Опубликован новый проект реформы налогообложения для приграничных регионов.",
-    slug: "zemelnyy-nalog",
-  },
-  {
-    tag: "Сервер",
-    date: "12 Октября",
-    title: "Обновление плагина городов",
-    text: "Технические работы завершены. Исправлены баги с объявлением войны и договорами аренды.",
-    slug: "obnovlenie-plagina",
-  },
-  {
-    tag: "Эвенты",
-    date: "10 Октября",
-    title: "Ярмарка в Новом Свете",
-    text: "Главный торговый союз приглашает всех игроков на осенний фестиваль обмена ресурсами.",
-    slug: "yarmarka",
-  },
-];
-
-const POPULAR = [
-  { title: "Основание городов: Гайд", author: "Gamer_Nomad", views: "2.4k", slug: "osnovanie-gorodov" },
-  {
-    title: "История создания Первой Республики",
-    author: "HistorianMC",
-    views: "1.8k",
-    slug: "istoriya-pervoy-respubliki",
-  },
-  { title: "Торговые коалиции и эмбарго", author: "EcoExpert", views: "940", slug: "torgovye-koalicii" },
-];
+function formatDate(iso: string) {
+  return new Date(iso).toLocaleDateString("ru-RU", {
+    day: "numeric",
+    month: "long",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
 
 const TAGS = [
   ["Узнай всё обо всём", false],
@@ -75,6 +53,16 @@ const TAGS = [
 ] as const;
 
 function Index() {
+  const { data } = useSuspenseQuery(homeQuery);
+  const [query, setQuery] = useState("");
+  const results = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return [];
+    return [...data.popular, ...data.news]
+      .filter((item) => item.title.toLowerCase().includes(q))
+      .slice(0, 6);
+  }, [query, data]);
+  const lucky = data.popular[0]?.slug ?? data.news[0]?.slug;
   return (
     <div className="min-h-screen bg-background text-foreground">
       <PixelField />
@@ -85,7 +73,12 @@ function Index() {
           <h2 className="flex items-center gap-2 text-lg font-bold text-cyan">
             <Newspaper className="size-5 shrink-0" /> Новости
           </h2>
-          {NEWS.map((n, i) => (
+          {data.news.length === 0 ? (
+            <p className="surface-card p-4 text-xs text-muted-foreground">
+              Новостей пока нет — администрация скоро что-нибудь опубликует.
+            </p>
+          ) : null}
+          {data.news.map((n, i) => (
             <Link
               key={n.slug}
               to="/article/$slug"
@@ -96,12 +89,14 @@ function Index() {
             >
               <div className="flex items-center justify-between gap-2">
                 <span className="rounded bg-secondary px-2 py-0.5 text-[10px] tracking-widest text-muted-foreground uppercase">
-                  {n.tag}
+                  {n.categories[0] ?? "Новость"}
                 </span>
-                <span className="shrink-0 text-[11px] text-muted-foreground">{n.date}</span>
+                <span className="shrink-0 text-[11px] text-muted-foreground">
+                  {formatDate(n.created_at)}
+                </span>
               </div>
               <h3 className="mt-2 text-sm font-semibold text-foreground">{n.title}</h3>
-              <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{n.text}</p>
+              <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{n.summary}</p>
             </Link>
           ))}
         </aside>
@@ -118,6 +113,8 @@ function Index() {
             <Search className="size-5 shrink-0 text-cyan" />
             <input
               type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
               placeholder="Поиск по статьям, городам и законам…"
               className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
             />
@@ -125,6 +122,25 @@ function Index() {
               ESC
             </kbd>
           </label>
+
+          {query.trim() ? (
+            <div className="surface-card mt-3 w-full divide-y divide-border text-left">
+              {results.length === 0 ? (
+                <p className="p-3 text-sm text-muted-foreground">Ничего не найдено</p>
+              ) : (
+                results.map((r) => (
+                  <Link
+                    key={r.slug}
+                    to="/article/$slug"
+                    params={{ slug: r.slug }}
+                    className="block px-3 py-2 text-sm text-muted-foreground hover:text-foreground"
+                  >
+                    {r.title}
+                  </Link>
+                ))
+              )}
+            </div>
+          ) : null}
 
           <div className="mt-6 flex flex-wrap justify-center gap-2">
             {TAGS.map(([label, accent]) => (
@@ -146,7 +162,7 @@ function Index() {
           <h2 className="flex items-center gap-2 text-lg font-bold text-magenta">
             <Star className="size-5 shrink-0" /> Популярные статьи
           </h2>
-          {POPULAR.map((p) => (
+          {data.popular.map((p) => (
             <Link
               key={p.slug}
               to="/article/$slug"
@@ -162,7 +178,7 @@ function Index() {
                   {p.title}
                 </span>
                 <span className="mt-1 flex items-center gap-2 text-[11px] text-muted-foreground">
-                  by {p.author}
+                  by {p.author_name}
                   <Eye className="size-3 shrink-0" />
                   {p.views}
                 </span>
@@ -170,14 +186,16 @@ function Index() {
             </Link>
           ))}
 
-          <Link
-            to="/article/$slug"
-            params={{ slug: "osnovanie-gorodov" }}
-            className="glow-magenta flex items-center justify-center gap-2 rounded-lg px-4 py-3 text-sm font-semibold text-accent-foreground"
-            style={{ backgroundImage: "var(--gradient-accent)" }}
-          >
-            <Sparkles className="size-4 shrink-0" /> Мне повезёт!
-          </Link>
+          {lucky ? (
+            <Link
+              to="/article/$slug"
+              params={{ slug: lucky }}
+              className="glow-magenta flex items-center justify-center gap-2 rounded-lg px-4 py-3 text-sm font-semibold text-accent-foreground"
+              style={{ backgroundImage: "var(--gradient-accent)" }}
+            >
+              <Sparkles className="size-4 shrink-0" /> Мне повезёт!
+            </Link>
+          ) : null}
         </aside>
       </main>
     </div>
