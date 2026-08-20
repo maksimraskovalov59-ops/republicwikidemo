@@ -9,9 +9,11 @@ import { SiteHeader } from "@/components/SiteHeader";
 import { PixelField } from "@/components/PixelField";
 
 export const Route = createFileRoute("/_authenticated/editor")({
-  validateSearch: (search: Record<string, unknown>) => ({
-    id: typeof search['id'] === "string" ? (search['id'] as string) : undefined,
-    kind: search['kind'] === "news" ? ("news" as const) : undefined,
+  validateSearch: (
+    search: Record<string, unknown>,
+  ): { id?: string; kind?: "news" } => ({
+    ...(typeof search['id'] === "string" ? { id: search['id'] as string } : {}),
+    ...(search['kind'] === "news" ? { kind: "news" as const } : {}),
   }),
   head: () => {
     const title = "Редактор статьи — RepublicMC WIKI";
